@@ -78,11 +78,4 @@ To take it to the next level, the following is the future course of plan:
 
 ---
 
-## Recommended Priority Order
 
-1. Add **technical indicators** — biggest signal improvement
-2. Switch to **HuberLoss** — more robust training
-3. Add **LR scheduler + early stopping** — better convergence
-4. Try **GRU** vs LSTM — often comparable but faster
-5. Experiment with **sequence length**
-6. Try **gradient clipping** — common LSTM best practice
