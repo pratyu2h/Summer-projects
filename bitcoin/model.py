@@ -1,13 +1,3 @@
-"""
-Base sequence forecaster. Predicts next-step return from a window of
-OHLCV + technical-indicator + time features.
-
-Exposes `encode()` separately from `forward()` because the RAF layer
-(retrieval.py) needs the model's learned representation of a window (its
-final hidden state) as the embedding for similarity search over history --
-it's the same vector the forecast head consumes, just intercepted before
-the last linear layer.
-"""
 import torch
 import torch.nn as nn
 
@@ -26,8 +16,6 @@ class BTCForecaster(nn.Module):
         rnn_out_dim = hidden_size * (2 if bidirectional else 1)
         self.embedding_dim = rnn_out_dim
 
-        # deeper head than the original single-hop fc1->fc2, per the
-        # README's "FC layers" suggestion (128 -> 64 -> 32 -> 1)
         self.head = nn.Sequential(
             nn.Linear(rnn_out_dim, 64),
             nn.ReLU(),
@@ -48,17 +36,6 @@ class BTCForecaster(nn.Module):
 
 
 class RAFBlendHead(nn.Module):
-    """
-    Second-stage head for the retrieval-augmented forecast. Takes the base
-    model's raw prediction plus retrieval statistics (similarity-weighted
-    mean of historical neighbor outcomes, and their spread) and learns how
-    much to trust each source, rather than a fixed hand-picked blend
-    weight. When retrieved neighbors have low std (tight historical
-    agreement) the model can learn to lean on retrieval; when std is high
-    (no clean analog) it can learn to lean on the raw forecast instead.
-
-    Input: (B, 3) = [raw_pred, retrieval_weighted_mean, retrieval_std]
-    """
 
     def __init__(self, hidden: int = 16):
         super().__init__()

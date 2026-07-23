@@ -1,21 +1,4 @@
-"""
-Retrieval layer -- the "RA" in Retrieval-Augmented Forecasting.
 
-Two things get retrieved for a given current market window:
-  1. Numeric neighbor outcomes (what actually happened after similar
-     historical windows) -> blended into the final numeric prediction
-     alongside the base GRU/LSTM forecast (`retrieval.py` + `RAFBlendHead`
-     in model.py... see combined usage in train.py).
-  2. The same neighbors, formatted as natural-language context -> fed into
-     the Gemini prompt in `gemini_reasoning.py`. This is a standard RAG
-     pattern: retrieve relevant context, then condition generation on it --
-     just applied to market history instead of documents.
-
-Index is built ONLY from the training split's embeddings. Querying it
-with a validation/test window and retrieving training-set neighbors is
-safe (no leakage: the neighbors' outcomes were already known at training
-time). Never index validation/test windows themselves.
-"""
 from dataclasses import dataclass
 
 import faiss
@@ -61,14 +44,7 @@ class MarketRetriever:
         ]
 
     def query_batch_stats(self, query_embeddings: np.ndarray, k: int = 10):
-        """
-        Vectorized version for scoring many windows at once (used during
-        training/eval of the blend head). Returns, per query:
-          weighted_mean: similarity-weighted mean of neighbor outcomes
-                          (closer neighbors get more weight -- softmax over -distance)
-          std: std of neighbor outcomes (retrieval "disagreement" -- a
-               useful signal on its own: high std = no clean historical analog)
-        """
+        
         distances, indices = self.index.search(query_embeddings.astype(np.float32), k)
         neighbor_outcomes = self.outcomes[indices]  # (B, k)
 

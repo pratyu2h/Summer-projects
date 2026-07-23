@@ -1,19 +1,3 @@
-"""
-Training for the full RAF pipeline: base GRU/LSTM forecaster -> FAISS
-retrieval index -> blend head. Three stages, run in order:
-
-  1. train_base_model   -- proper mini-batch training with DataLoader
-                            (the original notebook built a DataLoader and
-                            never used it, training full-batch instead)
-  2. build_retriever     -- encode the (non-shuffled) training set, index it
-  3. train_blend_head    -- small MLP learns how much to trust retrieval
-                             vs. the raw forecast, using retrieval stats
-                             computed for every train/val window
-
-evaluate() at the end reports RMSE for raw-only vs. blended predictions
-on the untouched test split, so you can see whether retrieval actually
-helps before writing it up as a resume bullet.
-"""
 import copy
 
 import numpy as np

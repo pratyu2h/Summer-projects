@@ -1,22 +1,4 @@
-"""
-Data pipeline for the Bitcoin RAF (Retrieval-Augmented Forecasting) model.
 
-Fixes two bugs from the original notebook:
-  1. Target was `data_scaled[i, 0]` (Open) but predictions were inverse-
-     transformed with `scaler_close` (fit on Close). Different columns
-     have different min/max, so the "price" plotted was silently wrong.
-     Here the target is explicitly Close, and the scaler used to build
-     it is the same one used to invert it.
-  2. Target is now the next-step *return* (pct change of Close), not the
-     raw price level. Raw crypto prices are non-stationary (the scale
-     itself drifts over months), which makes an LSTM's job artificially
-     hard; returns are far closer to stationary and are what the
-     "Prediction Strategy" section of the README already recommended.
-
-Adds technical indicators (RSI, MACD, Bollinger Bands, EMA) and time
-features (hour of day, day of week) as additional input channels, per
-the "Input Features" section of the README roadmap.
-"""
 from dataclasses import dataclass
 
 import numpy as np
@@ -56,8 +38,7 @@ def add_time_features(df: pd.DataFrame, timestamp_col: str = "Timestamp") -> pd.
     ts = df[timestamp_col]
     hour = ts.dt.hour
     dow = ts.dt.dayofweek
-    # cyclical encoding -- 23:00 and 00:00 should be "close" to the model,
-    # which a raw integer 0-23 doesn't express
+    
     df["hour_sin"] = np.sin(2 * np.pi * hour / 24)
     df["hour_cos"] = np.cos(2 * np.pi * hour / 24)
     df["dow_sin"] = np.sin(2 * np.pi * dow / 7)
@@ -85,11 +66,9 @@ def build_feature_frame(df: pd.DataFrame, timestamp_col: str = "Timestamp",
     df = add_time_features(df, timestamp_col)
     df = add_lag_features(df)
 
-    # target: next-step return, defined BEFORE dropping warmup rows so the
-    # shift lines up correctly, then dropna clears both the indicator
-    # warmup period (e.g. first 20 rows for Bollinger Bands) and the final
-    # row (whose future return is unknown)
+    
     df["target_return"] = df["Close"].pct_change().shift(-1)
+    df = df.replace([np.inf, -np.inf], np.nan)
     df = df.dropna().reset_index(drop=True)
     return df
 
@@ -129,9 +108,7 @@ def time_split(n: int, train_frac: float = 0.7, val_frac: float = 0.15):
 
 
 class BTCWindowDataset(Dataset):
-    """Wraps pre-scaled (X, y) arrays -- scaling is done once outside this class
-    (fit on train only) to avoid leaking val/test statistics into training."""
-
+    
     def __init__(self, X: np.ndarray, y: np.ndarray):
         self.X = torch.from_numpy(X).float()
         self.y = torch.from_numpy(y).float()
@@ -144,8 +121,7 @@ class BTCWindowDataset(Dataset):
 
 
 if __name__ == "__main__":
-    # synthetic OHLCV series -- validates indicator/feature/window logic
-    # without needing the real (large) Kaggle CSV
+    
     rng = np.random.default_rng(0)
     n = 500
     start = pd.Timestamp("2024-01-01")
