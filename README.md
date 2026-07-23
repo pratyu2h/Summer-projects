@@ -1,3 +1,18 @@
+# Summer Projects
+
+## Pneumonia / Multi-Disease Chest X-Ray Classifier
+
+`pneumonia classifier.ipynb` (repo root) is the original binary
+(Pneumonia vs Normal) ResNet-50 classifier. The **`pneumonia/`** folder
+contains the upgraded version: multi-label classification across all 14
+NIH ChestX-ray14 findings, focal loss for class imbalance, Grad-CAM
+interpretability, and a Gemini-based clinical decision-support layer.
+See `pneumonia/README.md` for architecture details and
+`pneumonia/pneumonia_classifier_v2.ipynb` to run it (Colab, GPU required).
+
+## Bitcoin LSTM Price Predictor
+
+`bitcoin project.ipynb` is a 1-minute BTC/USD LSTM price predictor.
 To take it to the next level, the following is the future course of plan:
 1) Replace LSTM with GRU (faster, sometimes better on smaller data) or Transformer
 2) Add more dense layers, e.g. 128→64→32→1
