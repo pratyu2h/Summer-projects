@@ -60,7 +60,6 @@ def build_prompt(
 
     return "\n".join(lines)
 
-
 def get_market_commentary(
     current_indicators: dict,
     raw_pred: float,
@@ -94,21 +93,20 @@ def get_market_commentary(
 
     try:
         response = client.models.generate_content(
-            model=model_name,
+            model=model_name.removeprefix("models/"),
             contents=prompt,
         )
     except Exception as exc:
         raise RuntimeError(
             f"Gemini request failed using model '{model_name}'. "
-            "Check GEMINI_MODEL in API.env and make sure that model is "
-            "available for your API key."
+            "Set GEMINI_MODEL in .env to a model available to your API key."
         ) from exc
 
-    if not response.text:
+    text = getattr(response, "text", None)
+    if not text:
         raise RuntimeError("Gemini returned an empty response.")
 
-    return response.text
-
+    return text
 
 if __name__ == "__main__":
     fake_indicators = {

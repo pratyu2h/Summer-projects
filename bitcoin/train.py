@@ -9,68 +9,98 @@ from data import BTCWindowDataset
 from model import BTCForecaster, RAFBlendHead
 from retrieval import MarketRetriever, build_retriever
 
+def _flat_prediction(pred):
+    """Convert model output to shape (batch_size,)."""
+    return pred.squeeze(-1) if pred.ndim > 1 else pred
+
 
 def train_base_model(model, train_loader, val_loader, device, epochs=30, lr=1e-3,
                       patience=5, checkpoint_path="base_model.pth"):
     model = model.to(device)
-    loss_fn = nn.HuberLoss()  # less sensitive to outlier moves than MSE, per README roadmap
+    loss_fn = nn.HuberLoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-5)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=2)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer,
+        mode="min",
+        factor=0.5,
+        patience=2,
+    )
 
-    best_val_loss, best_state, epochs_no_improve = float("inf"), None, 0
+    best_val_loss = float("inf")
+    best_state = copy.deepcopy(model.state_dict())
+    epochs_no_improve = 0
     history = []
 
     for epoch in range(1, epochs + 1):
         model.train()
         train_losses = []
+
         for X, y in train_loader:
             X, y = X.to(device), y.to(device)
-            pred = model(X)
+            pred = _flat_prediction(model(X))
             loss = loss_fn(pred, y)
 
             optimizer.zero_grad()
             loss.backward()
-            nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  # LSTMs/GRUs can explode without this
+            nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             train_losses.append(loss.item())
 
         model.eval()
         val_losses = []
+
         with torch.no_grad():
             for X, y in val_loader:
                 X, y = X.to(device), y.to(device)
-                pred = model(X)
+                pred = _flat_prediction(model(X))
                 val_losses.append(loss_fn(pred, y).item())
 
-        train_loss, val_loss = float(np.mean(train_losses)), float(np.mean(val_losses))
+        train_loss = float(np.mean(train_losses))
+        val_loss = float(np.mean(val_losses))
         scheduler.step(val_loss)
-        history.append({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss})
-        print(f"epoch {epoch}/{epochs}  train_loss={train_loss:.6f}  val_loss={val_loss:.6f}")
+
+        history.append({
+            "epoch": epoch,
+            "train_loss": train_loss,
+            "val_loss": val_loss,
+        })
+
+        print(
+            f"epoch {epoch}/{epochs}  "
+            f"train_loss={train_loss:.6f}  val_loss={val_loss:.6f}"
+        )
 
         if val_loss < best_val_loss:
-            best_val_loss, best_state, epochs_no_improve = val_loss, copy.deepcopy(model.state_dict()), 0
+            best_val_loss = val_loss
+            best_state = copy.deepcopy(model.state_dict())
+            epochs_no_improve = 0
             torch.save(best_state, checkpoint_path)
         else:
             epochs_no_improve += 1
             if epochs_no_improve >= patience:
-                print(f"  early stopping at epoch {epoch} (no val improvement for {patience} epochs)")
+                print(
+                    f"  early stopping at epoch {epoch} "
+                    f"(no val improvement for {patience} epochs)"
+                )
                 break
 
     model.load_state_dict(best_state)
     return model, history
 
 
-def compute_retrieval_features(model, loader, retriever: MarketRetriever, device, k=10):
-    """For every window in `loader`, get the base model's raw prediction plus
-    retrieval stats (weighted mean / std of the k nearest training-set neighbors)."""
+def compute_retrieval_features(model, loader, retriever: MarketRetriever,
+                                device, k=10):
+    """Return raw predictions, retrieval statistics, and targets."""
     model.eval()
     raw_preds, retrieval_means, retrieval_stds, targets = [], [], [], []
+
     with torch.no_grad():
         for X, y in loader:
             X = X.to(device)
-            emb = model.encode(X).cpu().numpy()
-            raw = model.head(model.encode(X)).squeeze(-1).cpu().numpy()
+            encoded = model.encode(X)
+            emb = encoded.cpu().numpy()
 
+            raw = _flat_prediction(model.head(encoded)).cpu().numpy()
             w_mean, std = retriever.query_batch_stats(emb, k=k)
 
             raw_preds.append(raw)
@@ -78,9 +108,12 @@ def compute_retrieval_features(model, loader, retriever: MarketRetriever, device
             retrieval_stds.append(std)
             targets.append(y.numpy())
 
-    return (np.concatenate(raw_preds), np.concatenate(retrieval_means),
-            np.concatenate(retrieval_stds), np.concatenate(targets))
-
+    return (
+        np.concatenate(raw_preds),
+        np.concatenate(retrieval_means),
+        np.concatenate(retrieval_stds),
+        np.concatenate(targets),
+    )
 
 def train_blend_head(raw_pred, retrieval_mean, retrieval_std, y, val_raw_pred, val_retrieval_mean,
                       val_retrieval_std, val_y, device, epochs=100, lr=1e-2):
