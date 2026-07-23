@@ -3,5 +3,6 @@ __pycache__/
 *.pth
 *.pt
 nih_data/
+btc_data/
 kaggle.json
 .ipynb_checkpoints/

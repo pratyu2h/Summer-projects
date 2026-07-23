@@ -1,0 +1,9 @@
+torch
+pandas
+numpy
+ta
+faiss-cpu
+scikit-learn
+matplotlib
+kaggle
+google-genai

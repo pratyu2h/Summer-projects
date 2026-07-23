@@ -10,9 +10,16 @@ interpretability, and a Gemini-based clinical decision-support layer.
 See `pneumonia/README.md` for architecture details and
 `pneumonia/pneumonia_classifier_v2.ipynb` to run it (Colab, GPU required).
 
-## Bitcoin LSTM Price Predictor
+## Bitcoin RAF (Retrieval-Augmented Forecasting) Price Predictor
 
-`bitcoin project.ipynb` is a 1-minute BTC/USD LSTM price predictor.
+`bitcoin project.ipynb` (repo root) is the original 1-minute BTC/USD LSTM
+price predictor. The **`bitcoin/`** folder contains the upgraded version:
+technical indicators, a GRU/LSTM forecaster predicting returns instead of
+raw price, FAISS retrieval over historical market windows, a learned
+blend head, and a Gemini reasoning layer grounded in the retrieved
+analogs (RAG pattern). See `bitcoin/README.md` for architecture details
+and `bitcoin/bitcoin_raf_v2.ipynb` to run it (Colab).
+
 To take it to the next level, the following is the future course of plan:
 1) Replace LSTM with GRU (faster, sometimes better on smaller data) or Transformer
 2) Add more dense layers, e.g. 128→64→32→1
