@@ -1,4 +1,6 @@
 import copy
+import os
+import tempfile
 
 import numpy as np
 import torch
@@ -10,7 +12,7 @@ from model import BTCForecaster, RAFBlendHead
 from retrieval import MarketRetriever, build_retriever
 
 def _flat_prediction(pred):
-    """Convert model output to shape (batch_size,)."""
+    """Converting model output to shape (batch_size,)."""
     return pred.squeeze(-1) if pred.ndim > 1 else pred
 
 
@@ -126,7 +128,7 @@ def train_blend_head(raw_pred, retrieval_mean, retrieval_std, y, val_raw_pred, v
     val_raw_pred, val_retrieval_mean, val_retrieval_std, val_y = map(
         to_t, (val_raw_pred, val_retrieval_mean, val_retrieval_std, val_y))
 
-    best_val_loss, best_state = float("inf"), None
+    best_val_loss, best_state = float("inf"), copy.deepcopy(blend.state_dict())
     for epoch in range(1, epochs + 1):
         blend.train()
         pred = blend(raw_pred, retrieval_mean, retrieval_std)
@@ -153,7 +155,7 @@ def rmse(pred: np.ndarray, target: np.ndarray) -> float:
 
 
 if __name__ == "__main__":
-    # end-to-end smoke test on synthetic data -- proves the full RAF
+    # end-to-end smoke test on synthetic data, proves the full RAF
     # pipeline (base model -> retriever -> blend head -> eval) runs
     import pandas as pd
 
@@ -177,7 +179,8 @@ if __name__ == "__main__":
     test_loader = DataLoader(test_ds, batch_size=16, shuffle=False)
 
     model = BTCForecaster(num_features=F, hidden_size=16, num_layers=1)
-    model, history = train_base_model(model, train_loader, val_loader, device, epochs=3, checkpoint_path="/tmp/smoke_base.pth")
+    smoke_checkpoint = os.path.join(tempfile.gettempdir(), "smoke_base.pth")
+    model, history = train_base_model(model, train_loader, val_loader, device, epochs=3, checkpoint_path=smoke_checkpoint)
     assert len(history) > 0
 
     retriever = build_retriever(model, train_loader_noshuffle, ts[:n_train], device)

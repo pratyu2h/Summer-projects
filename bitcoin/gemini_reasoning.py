@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-
+import pandas as pd 
 from dotenv import load_dotenv
 from retrieval import RetrievedNeighbor
 
@@ -119,17 +119,17 @@ if __name__ == "__main__":
         RetrievedNeighbor(
             distance=0.12,
             outcome_return=0.004,
-            timestamp="2024-03-01 14:00",
+            timestamp=pd.Timestamp("2024-03-01 15:00"),
         ),
         RetrievedNeighbor(
             distance=0.15,
             outcome_return=0.006,
-            timestamp="2024-05-14 09:00",
+            timestamp=pd.Timestamp("2024-05-14 09:00"),
         ),
         RetrievedNeighbor(
             distance=0.21,
             outcome_return=-0.001,
-            timestamp="2024-02-19 22:00",
+            timestamp=pd.Timestamp("2024-02-19 22:00"),
         ),
     ]
 

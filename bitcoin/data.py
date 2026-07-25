@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
-import ta
+from ta import momentum, trend, volatility
 import torch
 from torch.utils.data import Dataset
 
@@ -18,18 +18,18 @@ ALL_FEATURES = BASE_FEATURES + INDICATOR_FEATURES + TIME_FEATURES + LAG_FEATURES
 
 def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
-    df["rsi"] = ta.momentum.RSIIndicator(df["Close"], window=14).rsi()
+    df["rsi"] = momentum.RSIIndicator(df["Close"], window=14).rsi()
 
-    macd = ta.trend.MACD(df["Close"])
+    macd = trend.MACD(df["Close"])
     df["macd"] = macd.macd()
     df["macd_signal"] = macd.macd_signal()
 
-    bb = ta.volatility.BollingerBands(df["Close"], window=20)
+    bb = volatility.BollingerBands(df["Close"], window=20)
     df["bb_high"] = bb.bollinger_hband()
     df["bb_low"] = bb.bollinger_lband()
     df["bb_mid"] = bb.bollinger_mavg()
 
-    df["ema_20"] = ta.trend.EMAIndicator(df["Close"], window=20).ema_indicator()
+    df["ema_20"] = trend.EMAIndicator(df["Close"], window=20).ema_indicator()
     return df
 
 
