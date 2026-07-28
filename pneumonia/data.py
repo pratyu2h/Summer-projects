@@ -1,35 +1,10 @@
-"""
-Dataset loader for NIH ChestX-ray14.
-
-Expected layout after downloading (see README.md for the Kaggle download
-command -- run this part in Colab, not locally, the dataset is ~45GB):
-
-    data_root/
-      Data_Entry_2017.csv        # metadata: image name, finding labels, patient info
-      train_val_list.txt         # official NIH train+val split (image filenames)
-      test_list.txt              # official NIH test split
-      images/
-        00000001_000.png
-        00000001_001.png
-        ...
-
-"Finding Labels" in the CSV is a pipe-separated string, e.g.
-"Cardiomegaly|Effusion" or "No Finding". We turn that into a 14-dim
-multi-hot vector over NIH_CLASSES (No Finding is dropped -- it's implicit
-when all 14 entries are 0).
-
-We split by *patient ID*, not by image, using the official NIH list
-files. NIH ChestX-ray14 has multiple images per patient; splitting by
-image would leak the same patient's anatomy across train/val/test and
-inflate validation metrics.
-"""
+""" Dataset loader for NIH ChestX-ray14. """
 from pathlib import Path
-
 import pandas as pd
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
-
+from torchvision.transforms.functional import to_tensor
 from model import NIH_CLASSES
 
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
@@ -37,7 +12,7 @@ IMAGENET_STD = [0.229, 0.224, 0.225]
 
 
 class NIHChestXrayDataset(Dataset):
-    def __init__(self, data_root: str, split_file: str, transform=None,
+    def __init__(self, data_root: Path | str, split_file: str, transform=None,
                  csv_name: str = "Data_Entry_2017.csv", image_subdir: str = "images"):
         self.data_root = Path(data_root)
         self.image_dir = self.data_root / image_subdir
@@ -48,13 +23,11 @@ class NIHChestXrayDataset(Dataset):
 
         with open(self.data_root / split_file) as f:
             self.filenames = [line.strip() for line in f if line.strip()]
-        # keep only filenames actually present in the metadata (defensive
-        # against partial downloads / mismatched split files)
         self.filenames = [fn for fn in self.filenames if fn in meta.index]
 
         self.labels = torch.zeros(len(self.filenames), len(NIH_CLASSES), dtype=torch.float32)
         for i, fn in enumerate(self.filenames):
-            findings = meta.loc[fn, "Finding Labels"]
+            findings = str(meta.loc[fn, "Finding Labels"])
             if findings == "No Finding":
                 continue
             for label in findings.split("|"):
@@ -65,11 +38,13 @@ class NIHChestXrayDataset(Dataset):
     def __len__(self):
         return len(self.filenames)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx) -> tuple[torch.Tensor, torch.Tensor]:
         img_path = self.image_dir / self.filenames[idx]
         image = Image.open(img_path).convert("RGB")
         if self.transform:
             image = self.transform(image)
+        elif not isinstance(image, torch.Tensor):
+            image = to_tensor(image)
         return image, self.labels[idx]
 
     def class_positive_counts(self) -> torch.Tensor:
@@ -96,8 +71,7 @@ def get_transforms(train: bool = True, image_size: int = 224):
 
 
 if __name__ == "__main__":
-    # smoke test with a synthetic mini "dataset" so this runs without the
-    # real 45GB download -- validates parsing logic and __getitem__ shapes
+    """Smoke testing"""
     import tempfile
     import numpy as np
 

@@ -1,11 +1,3 @@
-"""
-Multi-label chest X-ray classifier.
-
-ResNet-50 backbone (ImageNet-pretrained) with the final FC layer replaced
-by a 14-way linear head, one logit per NIH ChestX-14 finding. No sigmoid
-inside the model -- keep raw logits and apply sigmoid at inference time
-so the loss function (BCEWithLogits / focal loss) stays numerically stable.
-"""
 import torch
 import torch.nn as nn
 from torchvision import models
@@ -29,29 +21,35 @@ class MultiLabelCXRModel(nn.Module):
             for param in self.backbone.parameters():
                 param.requires_grad = False
 
-        # replace the classification head; keep it trainable even if the
-        # rest of the backbone is frozen
-        self.backbone.fc = nn.Sequential(
-            nn.Dropout(dropout),
-            nn.Linear(in_features, num_classes),
-        )
+        self.backbone.fc = nn.Linear(in_features, num_classes)
+        self.dropout = nn.Dropout(dropout)
 
-        # kept for Grad-CAM: last conv block before global average pooling
+        # Grad-CAM hooks
         self.target_layer = self.backbone.layer4
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.backbone(x)  # raw logits, shape (B, num_classes)
+        x = self.backbone.conv1(x)
+        x = self.backbone.bn1(x)
+        x = self.backbone.relu(x)
+        x = self.backbone.maxpool(x)
+
+        x = self.backbone.layer1(x)
+        x = self.backbone.layer2(x)
+        x = self.backbone.layer3(x)
+        x = self.backbone.layer4(x)
+
+        x = self.backbone.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.dropout(x)
+        x = self.backbone.fc(x)
+        return x
 
     def predict_proba(self, x: torch.Tensor) -> torch.Tensor:
         with torch.no_grad():
             return torch.sigmoid(self.forward(x))
 
     def unfreeze_backbone(self, from_layer: str = "layer3"):
-        """
-        Progressive unfreezing: start training only the head, then unfreeze
-        deeper layers once the head has stabilized. from_layer in
-        {'layer1','layer2','layer3','layer4'} unfreezes that block onward.
-        """
+        """Unfreeze the backbone starting from a specific layer."""
         order = ["conv1", "bn1", "layer1", "layer2", "layer3", "layer4", "fc"]
         start = order.index(from_layer)
         unfreeze = False

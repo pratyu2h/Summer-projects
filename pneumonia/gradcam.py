@@ -1,17 +1,3 @@
-"""
-Grad-CAM for the multi-label CXR model.
-
-For a chosen target class, Grad-CAM weights the last conv layer's feature
-maps by the gradient of that class's logit w.r.t. those feature maps, then
-does a weighted sum + ReLU. The result is a coarse heatmap over the image
-showing which regions pushed the prediction for that specific finding --
-this is the piece that makes a black-box prediction clinically inspectable
-(e.g. "the model called Cardiomegaly because of the heart silhouette, not
-because of an artifact in the corner of the film").
-
-Reference: Selvaraju et al., "Grad-CAM: Visual Explanations from Deep
-Networks via Gradient-based Localization" (2017).
-"""
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -21,8 +7,8 @@ class GradCAM:
     def __init__(self, model, target_layer=None):
         self.model = model
         self.target_layer = target_layer or model.target_layer
-        self.activations = None
-        self.gradients = None
+        self.activations: torch.Tensor | None = None
+        self.gradients: torch.Tensor | None = None
 
         self._fwd_handle = self.target_layer.register_forward_hook(self._save_activation)
         self._bwd_handle = self.target_layer.register_full_backward_hook(self._save_gradient)
@@ -34,13 +20,7 @@ class GradCAM:
         self.gradients = grad_output[0].detach()
 
     def __call__(self, image: torch.Tensor, class_idx: int) -> np.ndarray:
-        """
-        image: (1, 3, H, W) single preprocessed image, requires no grad
-            from the caller -- gradients are handled internally.
-        class_idx: index into NIH_CLASSES for the finding to explain.
-
-        Returns: (H, W) heatmap in [0, 1], resized to the input resolution.
-        """
+        """Generate a Grad-CAM heatmap for a given image and target class."""
         self.model.eval()
         image = image.clone().requires_grad_(True)
 
@@ -50,7 +30,9 @@ class GradCAM:
         self.model.zero_grad()
         score.backward()
 
-        # global-average-pool the gradients over spatial dims -> per-channel weight
+        if self.gradients is None or self.activations is None:
+            raise RuntimeError("GradCAM failed: gradients or activations were not recorded.")
+
         weights = self.gradients.mean(dim=(2, 3), keepdim=True)  # (1, C, 1, 1)
         cam = (weights * self.activations).sum(dim=1, keepdim=True)  # (1, 1, h, w)
         cam = F.relu(cam)
@@ -71,11 +53,7 @@ class GradCAM:
 
 
 def overlay_heatmap(image_np: np.ndarray, heatmap: np.ndarray, alpha: float = 0.4):
-    """
-    image_np: (H, W, 3) uint8 or float [0,1] original image (unnormalized)
-    heatmap: (H, W) in [0, 1] from GradCAM.__call__
-    Returns: (H, W, 3) uint8 blended image, red = high attention.
-    """
+    """Overlay a heatmap on an image."""
     import matplotlib as mpl
 
     if image_np.dtype != np.uint8:

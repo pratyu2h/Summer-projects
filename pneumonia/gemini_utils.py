@@ -1,24 +1,7 @@
-"""
-Gemini-based clinical decision support layer.
-
-The CNN outputs calibrated-ish probabilities per finding; this module
-turns those numbers into a structured, readable summary by prompting
-Gemini with the model's own outputs (not the raw image -- the CNN has
-already done the visual work, Gemini's job here is reasoning/communication
-over structured findings, which is a more honest use of an LLM than
-asking it to "read" an X-ray it never saw pixels of).
-
-Explicitly NOT a diagnostic tool. Output is framed as decision *support*
-for a clinician, not a diagnosis, and the prompt says so.
-
-Requires: pip install google-genai
-Requires: a GEMINI_API_KEY environment variable (never hardcode the key).
-"""
 import os
 from dataclasses import dataclass
 
 from model import NIH_CLASSES
-
 
 @dataclass
 class Finding:
@@ -27,12 +10,7 @@ class Finding:
 
 
 def top_findings(probs, threshold: float = 0.5, top_k: int = 5) -> list[Finding]:
-    """
-    probs: iterable of length len(NIH_CLASSES), sigmoid outputs for one image.
-    Returns findings above `threshold`, sorted by probability descending,
-    capped at top_k. If nothing clears the threshold, returns the single
-    highest-probability finding so the report is never empty.
-    """
+    """Return the top-k findings above a threshold, or the top-1 if none are above."""
     paired = sorted(zip(NIH_CLASSES, probs), key=lambda x: x[1], reverse=True)
     above = [Finding(label, float(p)) for label, p in paired if p >= threshold][:top_k]
     if not above:
@@ -67,12 +45,8 @@ def build_prompt(findings: list[Finding], patient_context: str | None = None) ->
 
 
 def get_clinical_summary(probs, patient_context: str | None = None,
-                          threshold: float = 0.5, model_name: str = "gemini-2.5-flash") -> str:
-    """
-    Calls the Gemini API. Raises a clear error if the API key is missing
-    rather than silently failing, since this is a support-layer output
-    that shouldn't be presented if it wasn't actually generated.
-    """
+                          threshold: float = 0.5, model_name: str = "gemini-3.1-flash") -> str:
+    """Returns a short clinical decision-support note based on the model's output."""
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         raise RuntimeError(
@@ -87,11 +61,13 @@ def get_clinical_summary(probs, patient_context: str | None = None,
 
     client = genai.Client(api_key=api_key)
     response = client.models.generate_content(model=model_name, contents=prompt)
+    if response.text is None:
+        raise RuntimeError("Gemini response returned no text.")
     return response.text
 
 
 if __name__ == "__main__":
-    # sanity test the parts that don't need a live API call / key
+    # sanity test 
     fake_probs = [0.1] * len(NIH_CLASSES)
     fake_probs[NIH_CLASSES.index("Cardiomegaly")] = 0.87
     fake_probs[NIH_CLASSES.index("Effusion")] = 0.62

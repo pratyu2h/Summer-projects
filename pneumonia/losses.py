@@ -1,35 +1,11 @@
-"""
-Multi-label focal loss.
-
-Standard BCE treats every class as equally hard, which is a problem on
-NIH ChestX-14 / CheXpert: findings like "Hernia" appear in <0.5% of images
-while "Infiltration" appears in ~18%. Focal loss down-weights the easy,
-well-classified examples (usually the majority negative labels) and lets
-the model spend gradient budget on the hard/rare positives.
-
-Reference: Lin et al., "Focal Loss for Dense Object Detection" (2017),
-adapted here for the multi-label (sigmoid, not softmax) setting.
-"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 
 class MultiLabelFocalLoss(nn.Module):
-    """
-    Focal loss for multi-label classification (one sigmoid per class).
-
-    Args:
-        alpha: weighting factor in [0, 1] for the positive class, or a
-            per-class tensor of shape (num_classes,) for class-specific
-            weighting (recommended when class prevalence varies a lot,
-            e.g. Hernia vs Infiltration). Use `compute_alpha_from_freq`
-            below to derive this from your training set.
-        gamma: focusing parameter. 0 = plain weighted BCE. Typical 1-3.
-        reduction: 'mean' | 'sum' | 'none'
-    """
-
-    def __init__(self, alpha=0.25, gamma=2.0, reduction="mean"):
+    """Focal loss for multi-label classification."""
+    def __init__(self, alpha: float | torch.Tensor = 0.25, gamma: float = 2.0, reduction: str = "mean"):
         super().__init__()
         self.gamma = gamma
         self.reduction = reduction
@@ -64,21 +40,14 @@ class MultiLabelFocalLoss(nn.Module):
 
 
 def compute_alpha_from_freq(label_matrix: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
-    """
-    Derive a per-class alpha (weight on the positive term) from label
-    frequency in the training set. Rarer classes -> higher alpha, so the
-    loss doesn't get dominated by common findings like Infiltration.
-
-    label_matrix: (N, C) multi-hot tensor over the whole training set.
-    Returns: (C,) tensor of alphas in (0, 1).
-    """
+    """Computes per-class alpha for focal loss from label frequencies."""
     pos_freq = label_matrix.float().mean(dim=0).clamp(min=eps, max=1 - eps)
     alpha = 1.0 - pos_freq
     return alpha
 
 
 if __name__ == "__main__":
-    # quick sanity check on random data
+    # quick sanity check 
     torch.manual_seed(0)
     B, C = 8, 14
     logits = torch.randn(B, C, requires_grad=True)
